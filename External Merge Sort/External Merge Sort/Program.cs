@@ -40,7 +40,7 @@ public static class IOUtil
 public class BigFileSorter
 {
     private const int BufferSize = 26214400; //25MiB
-    private const int RowsPerFile = 1_000_000;
+    private const int RowsPerFile = 100_000;
 
     public class CustomerComparer : IComparer<Dictionary<int,string>>
     {
@@ -49,15 +49,24 @@ public class BigFileSorter
             return string.Compare(a[0], b[0], StringComparison.Ordinal);
         }
     }
+
+    public void Sort(string file)
+    {
+        var totalLines = Split(file);
+        SortTheChunks();
+        MergeTheChunks("sorted_"+file, totalLines);
+    }
     public int Split(string file)
     {
+        Console.WriteLine("Splitting file");
         using var sr = new StreamReader(File.OpenRead(file),bufferSize:BufferSize);
         var lineNumber = 0;
+        var totalLines = 0;
         
         //foreach split file
-        var fileIndex = 0;
+        
         StreamWriter sw;
-        for (; sr.Peek()>=0 ; fileIndex++)
+        for (var fileIndex = 0; sr.Peek()>=0 ; fileIndex++)
         {
             sw = new StreamWriter($"split{fileIndex:d5}");
             foreach (var line in sr.GetLinesString().Take(RowsPerFile))
@@ -67,14 +76,16 @@ public class BigFileSorter
                 sw.WriteLine(line);
             }
             sw.Close();
+            totalLines += lineNumber;
             lineNumber = 0;
         }
 
-        return fileIndex + 1;
+        return totalLines;
     }
     
     public void SortTheChunks()
     {
+        Console.WriteLine("Sorting files");
         //this is the slowest step of the 3
         foreach (var path in Directory.GetFiles(".", "split*"))
         {
@@ -104,67 +115,30 @@ public class BigFileSorter
         }
     }
 
-    public Dictionary<int, string>? ReadRow(StreamReader sr)
+    public void MergeTheChunks(string outputFile, int totalLines)
     {
-        var line = sr.ReadLine();
-        if (line == null) return null;
-        return JsonConvert.DeserializeObject<Dictionary<int,string>>(line);
-    }
-    
-    public void MergeTheChunks()
-    {
-        var cmp = new CustomerComparer();
-        
+        Console.WriteLine("Merging chunks");
         string[] paths = Directory.GetFiles(".", "sorted*");
         int chunks = paths.Length; // Number of chunks
-        int recordsize = 100; // estimated record size
 
         // Open the files
         var readers = new StreamReader[chunks];
         for (var i = 0; i < chunks; i++)
             readers[i] = new StreamReader(File.OpenRead(paths[i]),bufferSize:BufferSize);
         
-        var head = new Dictionary<int,string>[chunks].ToList();
-        for (var i = 0; i < chunks; i++)
-            head[i] = ReadRow(readers[i]);
-
         // Merge!
-        var sw = new StreamWriter(File.OpenWrite("BigFileSorted.txt"),bufferSize:BufferSize);
-        int lowest_index, j, progress = 0;
-        Dictionary<int,string>? lowest_value;
-        while (true)
+        var sw = new StreamWriter(File.OpenWrite(outputFile),bufferSize:BufferSize);
+        var inputLists = readers.Select(x => x.GetLines()).ToList();
+        var tree = new TurnamentTree<Dictionary<int, string>>(inputLists, new CustomerComparer());
+        var minElement = tree.Pop();
+        var lineNumber = 0;
+        while (minElement!=null)
         {
-            // Report the progress
-            if (++progress % 10_000 == 0) PrintPercentage(progress, chunks*RowsPerFile);
-
-                // Find the chunk with the lowest value
-            lowest_index = -1;
-            lowest_value = null;
-            for (j = 0; j < chunks; j++)
-            {
-                if (head[j] != null)
-                {
-                    if (lowest_index < 0 || cmp.Compare(head[j], lowest_value) < 0)
-                    {
-                        lowest_index = j;
-                        lowest_value = head[j];
-                    }
-                }
-            }
-
-            // Was nothing found in any queue? We must be done then.
-            if (lowest_index == -1)
-            {
-                break;
-            }
-            
-            // Output it
-            sw.WriteLine(JsonConvert.SerializeObject(lowest_value));
-            head[lowest_index] = ReadRow(readers[lowest_index]);
+            if (++lineNumber % 10_000 == 0) PrintPercentage(lineNumber, totalLines);
+            sw.WriteLine(JsonConvert.SerializeObject(minElement));
+            minElement = tree.Pop();
         }
-
         sw.Close();
-
         // Close and delete the files
         for (var i = 0; i < chunks; i++)
         {
@@ -177,8 +151,6 @@ public class BigFileSorter
     {
         Console.Write("{0:f2}%   \r", 100.0 * currentLine / total);
     }
-
-    
 }
 
 public class BigFileCreator
@@ -187,7 +159,7 @@ public class BigFileCreator
     {
         using var fw = new StreamWriter(File.OpenWrite("file.txt"),bufferSize:26214400); //25mb
         
-        for (var i = 0; i < 100_000_000; i++)
+        for (var i = 0; i < 5_000_000; i++)
         {
             if(i%100_000 == 0) Console.WriteLine(i);
             var row = new Dictionary<int, string>()
@@ -200,13 +172,11 @@ public class BigFileCreator
         
     }
 
-    public static void Msain(string[] args)
+    public static void Main(string[] args)
     {
         //BigFileCreator.Create();
-        /*var sort = new BigFileSorter();
-        sort.Split("file.txt");
-        sort.SortTheChunks();
-        sort.MergeTheChunks();*/
+        var sort = new BigFileSorter();
+        sort.Sort("file.txt");
         
     }
 }

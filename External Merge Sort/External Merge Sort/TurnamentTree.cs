@@ -57,7 +57,7 @@ public class TurnamentTree<T>
         }
 
         //root
-        if (_comparer.Compare(value, _data[i]) < 0)
+        if (Compare(value, _data[i]) < 0)
         {
             _top = value;
             _topOrigin = origin;
@@ -235,9 +235,9 @@ public class Naive
         return lowest_value;
     }
     
-    public static void Main(string[] args)
+    public static void Masin(string[] args)
     {
-        Random rnd = new Random();
+        /*Random rnd = new Random();
         
         var klists1 = new List<IEnumerable<string>>();
         var klists2 = new List<IEnumerable<string>>();
@@ -271,36 +271,32 @@ public class Naive
         }
         t2.Stop();
         Console.WriteLine("tree time "+t2.ElapsedMilliseconds);
+        */
 
 
-        /*var a = new List<string> {"a", "b", "c", "d"};
-        var b = new List<string> {"e", "f", "g", "h"};
-        var c = new List<string> {"i", "j", "k", "l"};
-        var d = new List<string> {"m", "n", "o", "p"};
-        
-        var tree = new TurnamentTree<string>(new List<IEnumerable<string>>{a,b,c,d}, StringComparer.Ordinal);
-        for (int i = 0; i < 4*4+1; i++)
+       
+        Random rnd = new Random();
+        for (int k = 4; k < 70; k++)
         {
-            Console.WriteLine(tree.Pop());
-        }*/
-        /*Random rnd = new Random();
-        var klists1 = new List<IEnumerable<string>>();
-        for (int i = 0; i < 55; i++)
-        {
-            var list1 = Enumerable
-                .Range(0, 1000)
-                .Select(_ => rnd.Next(0, 1000).ToString());
+            Console.WriteLine("--"+k);
+            var list = new List<IEnumerable<string>>();
+            for (int i = 0; i < k; i++)
+            {
+                var list1 = Enumerable
+                    .Range(0, 10)
+                    .Select(_ => rnd.Next(0, 1000).ToString());
             
-            klists1.Add(list1);
-        }
+                list.Add(list1);
+            }
 
         
-        var tree = new TurnamentTree<string>(klists1,StringComparer.Ordinal);
+            var tree = new TurnamentTree<string>(list,StringComparer.Ordinal);
         
-        for (int i = 0; i < 1000; i++)
-        {
-            Console.WriteLine(tree.Pop());
-        }*/
+            for (int i = 0; i < 10; i++)
+            {
+                Console.WriteLine(tree.Pop());
+            }
+        }
         
     }
 }
