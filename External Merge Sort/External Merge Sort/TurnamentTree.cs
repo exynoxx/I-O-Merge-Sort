@@ -104,7 +104,7 @@ public class TurnamentTree<T>
 
     private (int winner, int loser) PlayGame(int a, int b)
     {
-        return _comparer.Compare(_data[a], _data[b]) < 0 ? (a,b) : (b,a);
+        return Compare(_data[a], _data[b]) < 0 ? (a,b) : (b,a);
     }
 
     private int[] ConstructTree(T[] leafValues)
