@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using HPCsharp.Algorithms;
 
 public class TurnamentTree<T>
 {
@@ -10,14 +11,20 @@ public class TurnamentTree<T>
     private readonly IComparer<T> _comparer;
     private readonly IEnumerator<T>[] _streams;
 
+    private readonly int _leafHeight;
+    private readonly int _numLeafs;
+
     public TurnamentTree(List<IEnumerable<T>> inputLists, IComparer<T> comparer)
     {
-        var n = inputLists.Count * 2;
+        _leafHeight = (int) Math.Ceiling(Math.Log2(inputLists.Count));
+        _numLeafs = (int) Math.Pow(2, _leafHeight);
+        var n = (int) Math.Pow(2, _leafHeight + 1) - 1; //inputLists.Count * 2;
         _comparer = comparer;
         _data = new T[n];
+        _parent = new int[n];
         _origin = new int[n];
         _streams = new IEnumerator<T>[inputLists.Count];
-        
+
         for (int i = 0; i < inputLists.Count; i++)
         {
             _streams[i] = inputLists[i].GetEnumerator();
@@ -25,7 +32,10 @@ public class TurnamentTree<T>
             _origin[i] = i;
             //Fill(i);
         }
-        _parent = ConstructTree(_streams.Select(x=>x.Current).ToArray());
+
+        //_parent = ConstructTree(_streams.Select(x=>x.Current).ToArray());
+        ConstructTree(_numLeafs);
+        FillTree();
     }
 
     private IEnumerable<int> LeafToRootPath(int i)
@@ -37,15 +47,15 @@ public class TurnamentTree<T>
 
         yield return i;
     }
-
-    public void Fill(int i)
+    
+    public void Maintain(int i)
     {
         var value = _data[i];
         var origin = i;
-        for (; _parent[i] != i; i=_parent[i])
+        for (; _parent[i] != i; i = _parent[i])
         {
             //smaller than parent. current is the winner. keep loser in node. continue
-            if(Compare(value, _data[_parent[i]]) < 0) continue;
+            if (Compare(value, _data[_parent[i]]) < 0) continue;
 
             //parent is smaller one. update chain.
             var parentval = _data[_parent[i]];
@@ -79,115 +89,98 @@ public class TurnamentTree<T>
             var rootorigin = _origin.Last();
             _data[^1] = default;
             _data[rootorigin] = ReadFromList(rootorigin);
-            Fill(rootorigin);
+            Maintain(rootorigin);
             return rootval;
         }
-        
+
         var value = _top;
         _data[_topOrigin] = ReadFromList(_topOrigin);
-        Fill(_topOrigin);
+        Maintain(_topOrigin);
         return value;
     }
-    
+
     private T ReadFromList(int i)
     {
-        if(!_streams[i].MoveNext()) return default;
+        if (!_streams[i].MoveNext()) return default;
         return _streams[i].Current;
     }
-    
+
     private int Compare(T a, T b)
     {
         if (a == null) return 1;
         if (b == null) return -1;
-        return _comparer.Compare(a,b);
+        return _comparer.Compare(a, b);
     }
 
-    private (int winner, int loser) PlayGame(int a, int b)
+    private void ConstructTree(int numLeafs)
     {
-        return Compare(_data[a], _data[b]) < 0 ? (a,b) : (b,a);
+        int head = numLeafs;
+        int leafIndex = 0;
+        var parent = ConstructRecurse(ref leafIndex, ref head, 0);
+        _parent[parent] = parent;
     }
 
-    private int[] ConstructTree(T[] leafValues)
+    //directionConstant: ex: leftNodes always have a parent with index 2 higher than node itself.
+    //rightnodes always have a parent with index 1 higher
+    private int ConstructRecurse(ref int leafIndex, ref int head, int h)
     {
-        var queue = new List<(int,int,int,int)>();
-        var oddQueue = new List<(int,int)>();
-        var parent = new int[leafValues.Length*2];
-        for (int i = 0; i < leafValues.Length; i+=2)
+        if (h == _leafHeight)
         {
-            queue.Add((i,i+1,i,i+1));
-
-        }
-        var head = leafValues.Length; //start
-
-        //while there is more lvls in the tree, do:
-        for (var nextQueue = new List<(int,int,int,int)>(); true ; queue = nextQueue, nextQueue = new())
-        {
-            if (queue.Count == 1)
-            {
-                var (a, b,awinner,bwinner) = queue.First();
-                parent[a] = head;
-                parent[b] = head;
-                parent[head] = head;
-                var game = PlayGame(awinner, bwinner);
-                _data[head] = _data[game.loser];
-                _origin[head] = game.loser;
-                _top = _data[game.winner];
-                _topOrigin = game.winner;
-                break;
-            }
-
-            //construct bottom up. queue contains one lvl of nodes
-            for (int i = 0; i < queue.Count-queue.Count%2; i+=2)
-            {
-                //2 new parents
-                var left = head++;
-                var right = head++;
-                //let the children know
-                var (a, b,awinner,bwinner) = queue[i];
-                parent[a] = left;
-                parent[b] = left;
-                var (x,y,xwinner,ywinner) = queue[i+1];
-                parent[x] = right;
-                parent[y] = right;
-
-                //fill in node values correctly
-                var leftgame = PlayGame(awinner, bwinner);
-                _data[left] = _data[leftgame.loser];
-                _origin[left] = leftgame.loser;
-
-                var rightgame = PlayGame(xwinner, ywinner);
-                _data[right] = _data[rightgame.loser];
-                _origin[right] = rightgame.loser;
-                
-                nextQueue.Add((left,right,leftgame.winner,rightgame.winner));
-            }
-
-            //odd number of children. put in its own queue or merge the 2 across layers
-            if (queue.Count % 2 != 0)
-            {
-                var pos = head++;
-                var (a, b,awinner,bwinner) = queue.Last();
-                parent[a] = pos;
-                parent[b] = pos;
-
-                var game = PlayGame(awinner, bwinner);
-                _data[pos] = _data[game.loser];
-                _origin[pos] = game.loser;
-                
-                if(oddQueue.Count == 0)
-                    oddQueue.Add((pos,game.winner));
-                else
-                {
-                    var (otherPos, otherWinner) = oddQueue.Single();
-                    nextQueue.Add((otherPos,pos,otherWinner,game.winner));
-                    oddQueue.Clear();
-                }
-            }
-           
+            return leafIndex++;
         }
 
-        return parent;
+        var l = ConstructRecurse(ref leafIndex, ref head, h + 1);
+        var r = ConstructRecurse(ref leafIndex, ref head, h + 1);
+
+        _parent[l] = head;
+        _parent[r] = head;
+        head++;
+        return head - 1;
     }
+
+    public void FillTree()
+    {
+        int leafIndex = 0;
+        int head = _numLeafs;
+        var result = FillTreeRecurse(ref leafIndex, ref head, 0);
+        _top = result.winner;
+        _topOrigin = result.origin;
+    }
+
+    private (int pos, T winner, int origin) FillTreeRecurse(ref int leafIndex, ref int head, int h)
+    {
+        if (h == _leafHeight)
+        {
+            var idx = leafIndex++;
+            if (idx < _streams.Length)
+            {
+                _data[idx] = ReadFromList(idx);
+                return (idx, _data[idx], idx);
+            }
+
+            return (idx, default, -1);
+        }
+
+        var l = FillTreeRecurse(ref leafIndex, ref head, h + 1);
+        var r = FillTreeRecurse(ref leafIndex, ref head, h + 1);
+        if (Compare(l.winner, r.winner) < 0)
+        {
+            //write r, return l
+            var current = _parent[l.pos];
+            _data[current] = r.winner;
+            _origin[current] = r.origin;
+            return (current, l.winner, l.origin);
+        }
+        else
+        {
+            //write l, return r
+            var current = _parent[l.pos];
+            _data[current] = l.winner;
+            _origin[current] = l.origin;
+            return (current, r.winner, r.origin);
+        }
+    }
+
 }
 
 public class Naive
@@ -235,7 +228,7 @@ public class Naive
         return lowest_value;
     }
     
-    public static void Masin(string[] args)
+    public static void Main(string[] args)
     {
         /*Random rnd = new Random();
         
@@ -274,28 +267,22 @@ public class Naive
         */
 
 
-       
         Random rnd = new Random();
-        for (int k = 4; k < 70; k++)
+        var list = new List<IEnumerable<string>>();
+        for (int i = 0; i < 5; i++)
         {
-            Console.WriteLine("--"+k);
-            var list = new List<IEnumerable<string>>();
-            for (int i = 0; i < k; i++)
-            {
-                var list1 = Enumerable
-                    .Range(0, 10)
-                    .Select(_ => rnd.Next(0, 1000).ToString());
+            var list1 = Enumerable
+                .Range(0, 100)
+                .Select(_ => rnd.Next(0, 1000).ToString());
             
-                list.Add(list1);
-            }
+            list.Add(list1);
+        }
 
         
-            var tree = new TurnamentTree<string>(list,StringComparer.Ordinal);
-        
-            for (int i = 0; i < 10; i++)
-            {
-                Console.WriteLine(tree.Pop());
-            }
+        var tree = new TurnamentTree<string>(list,StringComparer.Ordinal);
+        for (int i = 0; i < 55; i++)
+        {
+            Console.WriteLine(tree.Pop());
         }
         
     }

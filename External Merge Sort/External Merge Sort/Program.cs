@@ -31,7 +31,7 @@ public class BigFileCreator
         
     }
 
-    public static void Main(string[] args)
+    public static void Maidn(string[] args)
     {
         //BigFileCreator.Create("file.txt");
         var sort = new BigFileSorter();
