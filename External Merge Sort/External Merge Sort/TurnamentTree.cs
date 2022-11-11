@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using HPCsharp.Algorithms;
+using Microsoft.VisualBasic;
 
 public class TurnamentTree<T>
 {
@@ -27,10 +28,9 @@ public class TurnamentTree<T>
 
         for (int i = 0; i < inputLists.Count; i++)
         {
-            _streams[i] = inputLists[i].GetEnumerator();
-            _data[i] = ReadFromList(i);
-            _origin[i] = i;
-            //Fill(i);
+            _streams[i] = inputLists[i].OrderBy(x=>x).GetEnumerator();
+            /*_data[i] = ReadFromList(i);
+            _origin[i] = i;*/
         }
 
         //_parent = ConstructTree(_streams.Select(x=>x.Current).ToArray());
@@ -47,7 +47,9 @@ public class TurnamentTree<T>
 
         yield return i;
     }
-    
+
+
+
     public void Maintain(int i)
     {
         var value = _data[i];
@@ -87,6 +89,7 @@ public class TurnamentTree<T>
         {
             var rootval = _data.Last();
             var rootorigin = _origin.Last();
+            if (rootorigin < 0) return default;
             _data[^1] = default;
             _data[rootorigin] = ReadFromList(rootorigin);
             Maintain(rootorigin);
@@ -115,7 +118,7 @@ public class TurnamentTree<T>
     private void ConstructTree(int numLeafs)
     {
         int head = numLeafs;
-        int leafIndex = 0;
+        int leafIndex = -1;
         var parent = ConstructRecurse(ref leafIndex, ref head, 0);
         _parent[parent] = parent;
     }
@@ -126,28 +129,26 @@ public class TurnamentTree<T>
     {
         if (h == _leafHeight)
         {
-            return leafIndex++;
+            return ++leafIndex;
         }
 
         var l = ConstructRecurse(ref leafIndex, ref head, h + 1);
         var r = ConstructRecurse(ref leafIndex, ref head, h + 1);
 
-        _parent[l] = head;
-        _parent[r] = head;
+        _parent[l] = _parent[r] = head;
         head++;
-        return head - 1;
+        return _parent[l];
     }
 
     public void FillTree()
     {
         int leafIndex = 0;
-        int head = _numLeafs;
-        var result = FillTreeRecurse(ref leafIndex, ref head, 0);
+        var result = FillTreeRecurse(ref leafIndex, 0);
         _top = result.winner;
         _topOrigin = result.origin;
     }
 
-    private (int pos, T winner, int origin) FillTreeRecurse(ref int leafIndex, ref int head, int h)
+    private (int pos, T winner, int origin) FillTreeRecurse(ref int leafIndex, int h)
     {
         if (h == _leafHeight)
         {
@@ -161,8 +162,9 @@ public class TurnamentTree<T>
             return (idx, default, -1);
         }
 
-        var l = FillTreeRecurse(ref leafIndex, ref head, h + 1);
-        var r = FillTreeRecurse(ref leafIndex, ref head, h + 1);
+        var l = FillTreeRecurse(ref leafIndex, h + 1);
+        var r = FillTreeRecurse(ref leafIndex, h + 1);
+        if (_parent[l.pos] != _parent[r.pos]) throw new Exception();
         if (Compare(l.winner, r.winner) < 0)
         {
             //write r, return l
@@ -267,20 +269,20 @@ public class Naive
         */
 
 
-        Random rnd = new Random();
         var list = new List<IEnumerable<string>>();
         for (int i = 0; i < 5; i++)
         {
+            var j = i;
             var list1 = Enumerable
-                .Range(0, 100)
-                .Select(_ => rnd.Next(0, 1000).ToString());
-            
+                .Range(0, 10)
+                .Select(x => (j*10+x).ToString());
+
             list.Add(list1);
         }
 
         
         var tree = new TurnamentTree<string>(list,StringComparer.Ordinal);
-        for (int i = 0; i < 55; i++)
+        for (int i = 0; i < 51; i++)
         {
             Console.WriteLine(tree.Pop());
         }

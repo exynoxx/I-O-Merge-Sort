@@ -37,9 +37,9 @@ public class BigFileSorter
 
     public void Sort(string file)
     {
-        //var totalLines = Split(file);
-        //SortTheChunks();
-        var totalLines = 5000_000;
+        var totalLines = Split(file);
+        SortTheChunks();
+        //var totalLines = 5000_000;
         MergeTheChunks("sorted_"+file, totalLines);
     }
     public int Split(string file)
