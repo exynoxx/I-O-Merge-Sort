@@ -10,47 +10,51 @@ public class TurnamentTree<T>
     private T _top; //item above root (smallest element)
     private int _topOrigin;
     private readonly IComparer<T> _comparer;
-    private readonly IEnumerator<T>[] _streams;
+    private IEnumerator<T>[] _streams;
 
-    private readonly int _leafHeight;
-    private readonly int _numLeafs;
+    private int _leafHeight;
+    private int _numLeafs;
 
     public TurnamentTree(List<IEnumerable<T>> inputLists, IComparer<T> comparer)
+    {
+        _comparer = comparer;
+        SetSource(inputLists);
+    }
+
+    public void SetSource(List<IEnumerable<T>> inputLists)
     {
         _leafHeight = (int) Math.Ceiling(Math.Log2(inputLists.Count));
         _numLeafs = (int) Math.Pow(2, _leafHeight);
         var n = (int) Math.Pow(2, _leafHeight + 1) - 1; //inputLists.Count * 2;
-        _comparer = comparer;
         _data = new T[n];
         _parent = new int[n];
         _origin = new int[n];
-        _streams = new IEnumerator<T>[inputLists.Count];
-
-        for (int i = 0; i < inputLists.Count; i++)
-        {
-            _streams[i] = inputLists[i].OrderBy(x=>x).GetEnumerator();
-            /*_data[i] = ReadFromList(i);
-            _origin[i] = i;*/
-        }
-
-        //_parent = ConstructTree(_streams.Select(x=>x.Current).ToArray());
+        _streams = inputLists.Select(x=>x.GetEnumerator()).ToArray();
+        
         ConstructTree(_numLeafs);
         FillTree();
     }
-
-    private IEnumerable<int> LeafToRootPath(int i)
+    
+    public T Pop()
     {
-        while (i != _parent[i])
+        if (_top == null)
         {
-            yield return i;
+            var rootval = _data.Last();
+            var rootorigin = _origin.Last();
+            if (rootorigin < 0) return default;
+            _data[^1] = default;
+            _data[rootorigin] = ReadFromList(rootorigin);
+            Maintain(rootorigin);
+            return rootval;
         }
 
-        yield return i;
+        var value = _top;
+        _data[_topOrigin] = ReadFromList(_topOrigin);
+        Maintain(_topOrigin);
+        return value;
     }
-
-
-
-    public void Maintain(int i)
+    
+    private void Maintain(int i)
     {
         var value = _data[i];
         var origin = i;
@@ -81,25 +85,6 @@ public class TurnamentTree<T>
             _data[i] = value;
             _origin[i] = origin;
         }
-    }
-
-    public T Pop()
-    {
-        if (_top == null)
-        {
-            var rootval = _data.Last();
-            var rootorigin = _origin.Last();
-            if (rootorigin < 0) return default;
-            _data[^1] = default;
-            _data[rootorigin] = ReadFromList(rootorigin);
-            Maintain(rootorigin);
-            return rootval;
-        }
-
-        var value = _top;
-        _data[_topOrigin] = ReadFromList(_topOrigin);
-        Maintain(_topOrigin);
-        return value;
     }
 
     private T ReadFromList(int i)
@@ -140,7 +125,7 @@ public class TurnamentTree<T>
         return _parent[l];
     }
 
-    public void FillTree()
+    private void FillTree()
     {
         int leafIndex = 0;
         var result = FillTreeRecurse(ref leafIndex, 0);
@@ -279,13 +264,11 @@ public class Naive
 
             list.Add(list1);
         }
-
         
         var tree = new TurnamentTree<string>(list,StringComparer.Ordinal);
         for (int i = 0; i < 51; i++)
         {
             Console.WriteLine(tree.Pop());
         }
-        
     }
 }
