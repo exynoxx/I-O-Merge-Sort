@@ -201,46 +201,9 @@ public class Naive
         return lowest_value;
     }
     
-    public static void Mains(string[] args)
+    public static void Main(string[] args)
     {
-        /*Random rnd = new Random();
-        
-        var klists1 = new List<IEnumerable<string>>();
-        var klists2 = new List<IEnumerable<string>>();
-        for (int i = 0; i < 55; i++)
-        {
-            var list1 = Enumerable
-                .Range(0, 1000000)
-                .Select(_ => rnd.Next(0, 1000).ToString());
-            var list2 = Enumerable
-                .Range(0, 1000000)
-                .Select(_ => rnd.Next(0, 1000).ToString());
-
-            klists1.Add(list1);
-            klists2.Add(list2);
-        }
-
-
-        var t1 = Stopwatch.StartNew();
-        var naive = new Naive(klists1);
-        for (int i = 0; i < 1000_000; i++)
-        {
-            naive.Pop();
-        }
-        t1.Stop();
-        Console.WriteLine("naive time "+t1.ElapsedMilliseconds);
-        var t2 = Stopwatch.StartNew();
-        var tree = new TurnamentTree<string>(klists2,StringComparer.Ordinal);
-        for (int i = 0; i < 1000_000; i++)
-        {
-            tree.Pop();
-        }
-        t2.Stop();
-        Console.WriteLine("tree time "+t2.ElapsedMilliseconds);
-        */
-
-
-        var list = new List<IEnumerable<string>>();
+        /*var list = new List<IEnumerable<string>>();
         for (int i = 0; i < 5; i++)
         {
             var j = i;
@@ -255,6 +218,74 @@ public class Naive
         for (int i = 0; i < 51; i++)
         {
             Console.WriteLine(tree.Pop());
+        }*/
+        Benchmark();
+    }
+
+    public static void Benchmark()
+    {
+        Random rnd = new Random();
+
+        foreach (var k in new []{3,100})
+        {
+            Console.WriteLine($"{k}-way merge");
+            var klists1 = new List<IEnumerable<string>>();
+            var klists2 = new List<IEnumerable<string>>();
+            for (int i = 0; i < k; i++)
+            {
+                var list1 = Enumerable
+                    .Range(0, 100000)
+                    .Select(_ => rnd.Next(0, 1000).ToString())
+                    .OrderBy(x=>x);
+                var list2 = Enumerable
+                    .Range(0, 100000)
+                    .Select(_ => rnd.Next(0, 1000).ToString())
+                    .OrderBy(x=>x);
+
+                klists1.Add(list1);
+                klists2.Add(list2);
+            }
+            Console.WriteLine("starting");
+            
+            var t1 = Stopwatch.StartNew();
+            var tree = new TurnamentTree<string>(klists1,StringComparer.Ordinal);
+            t1.Stop();
+            var t2 = Stopwatch.StartNew();
+            for (int i = 0; i < 100_000; i++)
+            {
+                tree.Pop();
+            }
+            t2.Stop();
+            Console.WriteLine("tree time:");
+            Console.WriteLine($"init:{t1.ElapsedMilliseconds}, time:{t2.ElapsedMilliseconds},total:{t1.ElapsedMilliseconds+t2.ElapsedMilliseconds}");
+            
+            var t3 = Stopwatch.StartNew();
+            var naive = new Naive(klists2);
+            t3.Stop();
+            var t4 = Stopwatch.StartNew();
+            for (int i = 0; i < 100_000; i++)
+            {
+                naive.Pop();
+            }
+            t4.Stop();
+            Console.WriteLine("naive time:");
+            Console.WriteLine($"init:{t3.ElapsedMilliseconds}, time:{t4.ElapsedMilliseconds},total:{t3.ElapsedMilliseconds+t4.ElapsedMilliseconds}");
+            /*
+             * 3-way merge
+            starting
+            tree time:
+            init:445, time:24,total:469
+            naive time:
+            init:412, time:298,total:710
+            
+            * 100-way merge
+            starting
+            tree time:
+            init:12301, time:42,total:12343
+            naive time:
+            init:12318, time:13048,total:25366
+
+             */
         }
     }
 }
