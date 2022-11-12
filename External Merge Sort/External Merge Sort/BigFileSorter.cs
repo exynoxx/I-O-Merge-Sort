@@ -48,7 +48,9 @@ public class BigFileSorter
         using var sr = new StreamReader(File.OpenRead(file),bufferSize:BufferSize);
         var lineNumber = 0;
         var totalLines = 0;
-        
+
+        const int mb = 1024 * 1024;
+        var memUsed = GC.GetTotalMemory(false) / mb;
         //foreach split file
         
         StreamWriter sw;
@@ -103,20 +105,25 @@ public class BigFileSorter
 
     public void MergeTheChunks(string outputFile, int totalLines)
     {
-        Console.WriteLine("Merging chunks");
         var k = 25;
-        
+        Console.WriteLine($"Merging chunks (target={k}-way-merge)");
+
         string[] paths = Directory
             .GetFiles(".", "sorted*")
             .ToArray();
-        
+        Console.WriteLine($"{paths.Length} split files");
+
+        var numChunks = (int) Math.Ceiling((decimal) (paths.Length / k));
+        var chunk = paths.Length / numChunks;
+        Console.WriteLine($"chunk={chunk}. {chunk}-way-merge");
+
         var sw = new StreamWriter(File.OpenWrite(outputFile),bufferSize:BufferSize);
-        for (int j = 0; j < paths.Length; j+=k)
+        for (int j = 0; j < paths.Length; j+=chunk)
         {
-            Console.WriteLine("Round " + j);
+            Console.WriteLine("merging " + Math.Min(chunk,paths.Length-j));
             // Open the files
             var readers = new StreamReader[k];
-            for (var i = 0; i < k; i++)
+            for (var i = 0; i < chunk; i++)
                 readers[i] = new StreamReader(File.OpenRead(paths[i+j]),bufferSize:BufferSize);
         
             // Merge!
@@ -130,19 +137,23 @@ public class BigFileSorter
                 sw.WriteLine(JsonConvert.SerializeObject(minElement));
                 minElement = tree.Pop();
             }
+            for (var i = 0; i < k; i++)
+            {
+                readers[i].Close();
+                File.Delete(paths[i+j]);
+            }
         }
         sw.Close();
 
         // Close and delete the files
-        /*for (var i = 0; i < chunks; i++)
-        {
-            readers[i].Close();
-            File.Delete(paths[i]);
-        }*/
+        
     }
 
     private void PrintPercentage(int currentLine, int total)
     {
-        Console.Write("{0:f2}%   \r", 100.0 * currentLine / total);
+        const int mb = 1024 * 1024;
+        var memUsed = GC.GetTotalMemory(true) / mb;
+        Console.WriteLine("{0:f2}", 100.0 * currentLine / total); //%   \r
+        Console.WriteLine($"{memUsed} MB");
     }
 }
