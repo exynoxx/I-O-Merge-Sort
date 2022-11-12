@@ -120,8 +120,7 @@ public class TurnamentTree<T>
         var l = ConstructRecurse(ref leafIndex, ref head, h + 1);
         var r = ConstructRecurse(ref leafIndex, ref head, h + 1);
 
-        _parent[l] = _parent[r] = head;
-        head++;
+        _parent[l] = _parent[r] = head++;
         return _parent[l];
     }
 
@@ -149,25 +148,12 @@ public class TurnamentTree<T>
 
         var l = FillTreeRecurse(ref leafIndex, h + 1);
         var r = FillTreeRecurse(ref leafIndex, h + 1);
-        if (_parent[l.pos] != _parent[r.pos]) throw new Exception();
-        if (Compare(l.winner, r.winner) < 0)
-        {
-            //write r, return l
-            var current = _parent[l.pos];
-            _data[current] = r.winner;
-            _origin[current] = r.origin;
-            return (current, l.winner, l.origin);
-        }
-        else
-        {
-            //write l, return r
-            var current = _parent[l.pos];
-            _data[current] = l.winner;
-            _origin[current] = l.origin;
-            return (current, r.winner, r.origin);
-        }
+        var current = _parent[l.pos];
+        var (winner, loser) = Compare(l.winner, r.winner) < 0 ? (l, r) : (r, l);
+        _data[current] = loser.winner;
+        _origin[current] = loser.origin;
+        return (current, winner.winner, winner.origin);
     }
-
 }
 
 public class Naive
@@ -215,7 +201,7 @@ public class Naive
         return lowest_value;
     }
     
-    public static void Main(string[] args)
+    public static void Mains(string[] args)
     {
         /*Random rnd = new Random();
         
