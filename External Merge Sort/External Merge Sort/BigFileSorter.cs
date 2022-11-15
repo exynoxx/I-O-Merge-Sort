@@ -73,7 +73,7 @@ public class BigFileSorter
                 }
             }
             
-            Console.Write("Sorting    \r");
+            Console.Write("Sorting               \r");
             
             var array = rows.ToArray();
             array.SortMergeInPlaceAdaptivePar(new CustomerComparer());
@@ -86,8 +86,6 @@ public class BigFileSorter
             array = null;
             GC.Collect();
         }
-        Console.WriteLine();
-
         return totalLines;
     }
 
