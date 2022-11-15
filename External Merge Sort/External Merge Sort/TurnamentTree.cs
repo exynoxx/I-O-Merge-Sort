@@ -201,7 +201,7 @@ public class Naive
         return lowest_value;
     }
     
-    public static void Main(string[] args)
+    public static void Masin(string[] args)
     {
         /*var list = new List<IEnumerable<string>>();
         for (int i = 0; i < 5; i++)

@@ -1,4 +1,5 @@
-﻿using HPCsharp;
+﻿using System.Diagnostics;
+using HPCsharp;
 using Newtonsoft.Json;
 
 public static class IOUtil
@@ -25,8 +26,8 @@ public static class IOUtil
 public class BigFileSorter
 {
     private const int BufferSize = 26214400; //25MiB
-    private const int RowsPerFile = 100_000;
-
+    private const int MaxRamUsage = 500; //in mb
+    
     public class CustomerComparer : IComparer<Dictionary<int,string>>
     {
         public int Compare(Dictionary<int,string> a, Dictionary<int,string> b)
@@ -37,123 +38,127 @@ public class BigFileSorter
 
     public void Sort(string file)
     {
-        var totalLines = Split(file);
-        SortTheChunks();
-        //var totalLines = 5000_000;
+        var totalLines = SplitSort(file);
         MergeTheChunks("sorted_"+file, totalLines);
     }
-    public int Split(string file)
+    public int SplitSort(string file)
     {
-        Console.WriteLine("Splitting file");
-        using var sr = new StreamReader(File.OpenRead(file),bufferSize:BufferSize);
-        var lineNumber = 0;
+        Console.WriteLine("Splitting and sorting file");
         var totalLines = 0;
-
         const int mb = 1024 * 1024;
-        var memUsed = GC.GetTotalMemory(false) / mb;
-        //foreach split file
-        
+        using var sr = new StreamReader(File.OpenRead(file),bufferSize:BufferSize);
+
+
         StreamWriter sw;
         for (var fileIndex = 0; sr.Peek()>=0 ; fileIndex++)
         {
-            sw = new StreamWriter($"split{fileIndex:d5}");
-            foreach (var line in sr.GetLinesString().Take(RowsPerFile))
-            {
-                if (++lineNumber % 10_000 == 0) PrintPercentage(lineNumber, RowsPerFile);
-                
-                sw.WriteLine(line);
-            }
-            sw.Close();
-            totalLines += lineNumber;
-            lineNumber = 0;
-        }
+            Console.WriteLine("Loading file");
 
-        return totalLines;
-    }
-    
-    public void SortTheChunks()
-    {
-        Console.WriteLine("Sorting files");
-        //this is the slowest step of the 3
-        foreach (var path in Directory.GetFiles(".", "split*"))
-        {
-            Console.WriteLine($"Sorting file {path}");
-            var sr = new StreamReader(File.OpenRead(path),bufferSize:BufferSize);
-            Console.WriteLine("sort");
-            var rows = sr.GetLines().ToArray();
-            sr.Close();
-            // Sort the in-memory array
-            rows.SortMergeInPlaceAdaptivePar(new CustomerComparer());
-            // Create the 'sorted' filename
-            var newpath = path.Replace("split", "sorted");
-            // Write it
-            Console.WriteLine("writing");
-            var sw = new StreamWriter(File.OpenWrite(newpath), bufferSize:BufferSize);
-            foreach (var row in rows)
+            var currentLines = 0;
+            
+            sw = new StreamWriter($"sorted{fileIndex:d5}");
+            var rows = new List<Dictionary<int,string>>(10000000);
+            foreach (var line in sr.GetLines())
             {
-                sw.WriteLine(JsonConvert.SerializeObject(row));
+                rows.Add(line);
+                currentLines++;
+                if (++totalLines % 50_000 == 0)
+                {
+                    var usage = Process.GetCurrentProcess().WorkingSet64 / mb;
+                    if (usage > MaxRamUsage)
+                    {
+                        break;
+                    }
+                    Console.Write($"{currentLines:n0} ({totalLines:n0})   \r");
+                }
+            }
+            
+            Console.Write("Sorting    \r");
+            
+            var array = rows.ToArray();
+            array.SortMergeInPlaceAdaptivePar(new CustomerComparer());
+            foreach (var item in array)
+            {
+                sw.WriteLine(JsonConvert.SerializeObject(item));
             }
             sw.Close();
-            //File.WriteAllLines(newpath, rows);
-            // Delete the unsorted chunk
-            File.Delete(path);
-            // Free the in-memory sorted array
             rows = null;
+            array = null;
             GC.Collect();
         }
+        Console.WriteLine();
+
+        return totalLines;
     }
 
     public void MergeTheChunks(string outputFile, int totalLines)
     {
-        var k = 25;
-        Console.WriteLine($"Merging chunks (target={k}-way-merge)");
+        var K = 25;
+        Console.WriteLine($"Merging chunks (target={K}-way-merge)");
 
         string[] paths = Directory
             .GetFiles(".", "sorted*")
             .ToArray();
         Console.WriteLine($"{paths.Length} split files");
-
-        var numChunks = (int) Math.Ceiling((decimal) (paths.Length / k));
-        var chunk = paths.Length / numChunks;
-        Console.WriteLine($"chunk={chunk}. {chunk}-way-merge");
-
-        var sw = new StreamWriter(File.OpenWrite(outputFile),bufferSize:BufferSize);
-        for (int j = 0; j < paths.Length; j+=chunk)
-        {
-            Console.WriteLine("merging " + Math.Min(chunk,paths.Length-j));
-            // Open the files
-            var readers = new StreamReader[k];
-            for (var i = 0; i < chunk; i++)
-                readers[i] = new StreamReader(File.OpenRead(paths[i+j]),bufferSize:BufferSize);
         
-            // Merge!
-            var inputLists = readers.Select(x => x.GetLines()).ToList();
-            var tree = new TurnamentTree<Dictionary<int, string>>(inputLists, new CustomerComparer());
-            var minElement = tree.Pop();
-            var lineNumber = 0;
-            while (minElement!=null)
-            {
-                if (++lineNumber % 10_000 == 0) PrintPercentage(lineNumber, totalLines);
-                sw.WriteLine(JsonConvert.SerializeObject(minElement));
-                minElement = tree.Pop();
-            }
-            for (var i = 0; i < k; i++)
+        var sw = new StreamWriter(File.OpenWrite(outputFile),bufferSize:BufferSize);
+        if (paths.Length < K)
+        {
+            var readers = new StreamReader[paths.Length];
+            for (var i = 0; i < paths.Length; i++)
+                readers[i] = new StreamReader(File.OpenRead(paths[i]),bufferSize:BufferSize);
+            MergeGroup(readers,sw,totalLines);
+            
+            for (var i = 0; i < paths.Length; i++)
             {
                 readers[i].Close();
-                File.Delete(paths[i+j]);
+                File.Delete(paths[i]);
+            }
+        }
+        else
+        {
+            for (int j = 0; j < paths.Length; j+=K)
+            {
+                //if next iteration is small. include in this
+                if (paths.Length - (j+K) < 5)
+                {
+                    K = paths.Length - j;
+                }
+                var readers = new StreamReader[K];
+                for (var i = 0; i < K; i++)
+                    readers[i] = new StreamReader(File.OpenRead(paths[i+j]),bufferSize:BufferSize);
+        
+                MergeGroup(readers,sw,totalLines);
+                for (var i = 0; i < K; i++)
+                {
+                    readers[i].Close();
+                    File.Delete(paths[i+j]);
+                }
             }
         }
         sw.Close();
+    }
 
-        // Close and delete the files
-        
+    public void MergeGroup(StreamReader[] sr, StreamWriter sw, int totalLines)
+    {
+        Console.WriteLine("merging");
+
+        // Merge!
+        var inputLists = sr.Select(x => x.GetLines()).ToList();
+        var tree = new TurnamentTree<Dictionary<int, string>>(inputLists, new CustomerComparer());
+        var minElement = tree.Pop();
+        var lineNumber = 0;
+        while (minElement!=null)
+        {
+            if (++lineNumber % 50_000 == 0) PrintPercentage(lineNumber, totalLines);
+            sw.WriteLine(JsonConvert.SerializeObject(minElement));
+            minElement = tree.Pop();
+        }
+        Console.WriteLine();
     }
 
     private void PrintPercentage(int currentLine, int total)
     {
-        const int mb = 1024 * 1024;
-        var memUsed = GC.GetTotalMemory(true) / mb;
-        Console.WriteLine("{0:f2}", 100.0 * currentLine / total); //%   \r
-        Console.WriteLine($"{memUsed} MB");
+        Console.Write("{0:f2}%   \r", 100.0 * currentLine / total); 
     }
 }

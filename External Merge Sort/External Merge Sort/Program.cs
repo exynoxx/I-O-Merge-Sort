@@ -31,12 +31,21 @@ public class BigFileCreator
         
     }
 
-    public static void Mains(string[] args)
+    public static string FieldValue(string dictionary)
+    {
+        return dictionary.Substring(1, dictionary.Length - 2)
+            .Split(",")
+            .Where(x => x.Contains("\"0\":"))
+            .Single()
+            .Split(":")[1];
+    }
+
+    public static void Main(string[] args)
     {
         //BigFileCreator.Create("file.txt");
         var sort = new BigFileSorter();
         sort.Sort("file.txt");
-        
+
     }
 }
 
